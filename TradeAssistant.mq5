@@ -14,11 +14,6 @@ input int    CloseAfterBars     = 24;
 input bool   OnePositionOnly    = true;
 input bool   UseATRTrailing     = true;
 
-//--- Auto entry by low ATR
-input bool   UseAutoEntry       = true;
-input int    ATRAvgPeriod       = 100;
-input double ATRLowMultiplier   = 0.7;
-
 //--- Buttons
 string BtnSell = "Sell";
 string BtnDeal = "Deal";
@@ -100,9 +95,6 @@ void OnTick()
          TrailPositionByATR();
 
       CheckPositionCloseByBars();
-
-      if(UseAutoEntry)
-         CheckAutoEntryByLowATR();
    }
 }
 
@@ -269,138 +261,6 @@ double GetATRByShift(int shift)
 }
 
 
-//+------------------------------------------------------------------+
-double GetAverageATR(int period)
-{
-   int handle =
-      iATR(_Symbol, PERIOD_CURRENT, ATRPeriod);
-
-   if(handle == INVALID_HANDLE)
-      return 0;
-
-   double buffer[];
-
-   int copied =
-      CopyBuffer(handle,0,1,period,buffer);
-
-   IndicatorRelease(handle);
-
-   if(copied <= 0)
-      return 0;
-
-   double sum = 0;
-
-   for(int i=0; i<copied; i++)
-      sum += buffer[i];
-
-   return sum / copied;
-}
-
-
-//+------------------------------------------------------------------+
-void CheckAutoEntryByLowATR()
-{
-   if(OnePositionOnly && PositionSelect(_Symbol))
-   {
-      Log("Auto entry skipped: position already exists");
-      return;
-   }
-
-   double atr = GetATR();
-   double avgATR = GetAverageATR(ATRAvgPeriod);
-
-   if(atr <= 0 || avgATR <= 0)
-   {
-      Log("Auto entry skipped: ATR unavailable");
-      return;
-   }
-
-   double threshold = avgATR * ATRLowMultiplier;
-
-   Log(
-      "ATR="
-      + DoubleToString(atr,_Digits)
-      + " AvgATR="
-      + DoubleToString(avgATR,_Digits)
-      + " Threshold="
-      + DoubleToString(threshold,_Digits)
-   );
-
-   // ATR filter
-   if(atr >= threshold)
-   {
-      Log("ATR filter rejected");
-      return;
-   }
-
-   Log("ATR filter passed");
-
-   // Direction filter
-   int signal = GetEntrySignal();
-
-   if(signal > 0)
-   {
-      Log("Entry signal BUY");
-      OpenTrade(ORDER_TYPE_BUY, "ATR + Signal");
-      return;
-   }
-
-   if(signal < 0)
-   {
-      Log("Entry signal SELL");
-      OpenTrade(ORDER_TYPE_SELL, "ATR + Signal");
-      return;
-   }
-
-   Log("Entry signal NONE");
-}
-
-//+------------------------------------------------------------------+
-//| Returns:
-//|  1 = BUY
-//| -1 = SELL
-//|  0 = no signal
-//+------------------------------------------------------------------+
-int GetEntrySignal()
-{
-   int lookback = 50;
-
-   int highestIndex =
-      iHighest(
-         _Symbol,
-         PERIOD_CURRENT,
-         MODE_HIGH,
-         lookback,
-         1
-      );
-
-   int lowestIndex =
-      iLowest(
-         _Symbol,
-         PERIOD_CURRENT,
-         MODE_LOW,
-         lookback,
-         1
-      );
-
-   if(highestIndex == 1)
-   {
-      Log("Entry signal BUY: candle[1] made highest high of last "
-          + IntegerToString(lookback));
-
-      return 1;
-   }
-
-   if(lowestIndex == 1)
-   {
-      Log("Entry signal SELL: candle[1] made lowest low of last "
-          + IntegerToString(lookback));
-
-      return -1;
-   }
-
-   return 0;
-}
 //+------------------------------------------------------------------+
 double CalculateLot(double stopDistance)
 {
