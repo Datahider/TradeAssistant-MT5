@@ -15,7 +15,6 @@ input bool   UseATRTrailing     = true;
 
 //--- Buttons
 string BtnSell = "Sell";
-string BtnDeal = "Deal";
 string BtnBuy  = "Buy";
 
 //--- Service
@@ -32,8 +31,6 @@ void Log(string msg)
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   //MathSrand(RandomSeed);
-
    if(!IsNettingAccount())
    {
       Log("EA supports netting accounts only");
@@ -82,7 +79,6 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    ObjectDelete(0, BtnSell);
-   ObjectDelete(0, BtnDeal);
    ObjectDelete(0, BtnBuy);
 
    Log("EA stopped");
@@ -119,9 +115,6 @@ void OnChartEvent(
 
    if(sparam == BtnSell)
       OpenTrade(ORDER_TYPE_SELL, "Button Sell");
-
-   if(sparam == BtnDeal)
-      OpenRandomTrade("Button Deal");
 }
 
 
@@ -129,8 +122,7 @@ void OnChartEvent(
 void CreateButtons()
 {
    CreateButton(BtnSell, 20, 20);
-   CreateButton(BtnDeal, 140, 20);
-   CreateButton(BtnBuy,  260, 20);
+   CreateButton(BtnBuy,  140, 20);
 }
 
 
@@ -147,18 +139,6 @@ void CreateButton(string name,int x,int y)
    ObjectSetInteger(0,name,OBJPROP_YSIZE,35);
 
    ObjectSetString(0,name,OBJPROP_TEXT,name);
-}
-
-
-//+------------------------------------------------------------------+
-void OpenRandomTrade(string reason)
-{
-   ENUM_ORDER_TYPE type =
-      (MathRand() % 2 == 0)
-      ? ORDER_TYPE_BUY
-      : ORDER_TYPE_SELL;
-
-   OpenTrade(type, reason);
 }
 
 
