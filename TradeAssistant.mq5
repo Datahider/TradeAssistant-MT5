@@ -20,6 +20,7 @@ string BtnBuy  = "Buy";
 
 //--- Service
 datetime lastBarTime = 0;
+int atr_handle = INVALID_HANDLE;
 
 
 //+------------------------------------------------------------------+
@@ -35,6 +36,15 @@ int OnInit()
    if(!IsNettingAccount())
    {
       Log("EA supports netting accounts only");
+      return(INIT_FAILED);
+   }
+
+   atr_handle =
+      iATR(_Symbol, PERIOD_CURRENT, ATRPeriod);
+
+   if(atr_handle == INVALID_HANDLE)
+   {
+      Log("Failed to create ATR handle");
       return(INIT_FAILED);
    }
 
@@ -82,6 +92,12 @@ void OnDeinit(const int reason)
    ObjectDelete(0, BtnSell);
    ObjectDelete(0, BtnAdd);
    ObjectDelete(0, BtnBuy);
+
+   if(atr_handle != INVALID_HANDLE)
+   {
+      IndicatorRelease(atr_handle);
+      atr_handle = INVALID_HANDLE;
+   }
 
    Log("EA stopped");
 }
@@ -375,21 +391,13 @@ double GetATR()
 //+------------------------------------------------------------------+
 double GetATRByShift(int shift)
 {
-   int handle =
-      iATR(_Symbol, PERIOD_CURRENT, ATRPeriod);
-
-   if(handle == INVALID_HANDLE)
+   if(atr_handle == INVALID_HANDLE)
       return 0;
 
    double buffer[];
 
-   if(CopyBuffer(handle,0,shift,1,buffer) <= 0)
-   {
-      IndicatorRelease(handle);
+   if(CopyBuffer(atr_handle,0,shift,1,buffer) <= 0)
       return 0;
-   }
-
-   IndicatorRelease(handle);
 
    return buffer[0];
 }
