@@ -191,7 +191,15 @@ void OpenTrade(ENUM_ORDER_TYPE type, string reason)
    if(type == ORDER_TYPE_SELL)
       sl = bid + stopDistance;
 
-   double lot = CalculateLot(stopDistance);
+   double entry_price = 0;
+
+   if(type == ORDER_TYPE_BUY)
+      entry_price = ask;
+
+   if(type == ORDER_TYPE_SELL)
+      entry_price = bid;
+
+   double lot = CalculateLot(type, entry_price, sl);
 
    if(lot <= 0)
       return;
@@ -388,24 +396,18 @@ double GetATRByShift(int shift)
 
 
 //+------------------------------------------------------------------+
-double CalculateLot(double stopDistance)
+double CalculateLot(
+   ENUM_ORDER_TYPE type,
+   double entry_price,
+   double stop_loss)
 {
-   double tickSize =
-      SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   double loss_per_lot =
+      CalculateLossPerLot(type, entry_price, stop_loss);
 
-   double tickValue =
-      SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_VALUE);
-
-   if(tickSize <= 0 || tickValue <= 0)
+   if(loss_per_lot <= 0)
       return 0;
 
-   double riskPerLot =
-      (stopDistance / tickSize) * tickValue;
-
-   if(riskPerLot <= 0)
-      return 0;
-
-   double lot = RiskMoney / riskPerLot;
+   double lot = RiskMoney / loss_per_lot;
 
    double minLot =
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
@@ -431,6 +433,18 @@ double CalculateLot(double stopDistance)
       lot = maxLot;
 
    lot = NormalizeVolumeDown(lot);
+
+   double actual_risk =
+      CalculateLossPerLot(type, entry_price, stop_loss, lot);
+
+   if(actual_risk > RiskMoney)
+      lot = NormalizeVolumeDown(lot - stepLot);
+
+   if(lot < minLot)
+   {
+      Log("Trade skipped: minimal lot exceeds risk");
+      return 0;
+   }
 
    return lot;
 }
@@ -487,9 +501,44 @@ double NormalizeVolumeDown(double volume)
    if(step_lot <= 0)
       return 0;
 
+   if(volume <= 0)
+      return 0;
+
    volume = MathFloor(volume / step_lot) * step_lot;
 
    return NormalizeDouble(volume, volume_digits);
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateLossPerLot(
+   ENUM_ORDER_TYPE type,
+   double entry_price,
+   double stop_loss,
+   double volume = 1.0)
+{
+   double profit = 0;
+
+   if(volume <= 0)
+      return 0;
+
+   if(!OrderCalcProfit(
+      type,
+      _Symbol,
+      volume,
+      entry_price,
+      stop_loss,
+      profit
+   ))
+   {
+      Log("OrderCalcProfit failed");
+      return 0;
+   }
+
+   if(profit >= 0)
+      return 0;
+
+   return -profit;
 }
 
 
