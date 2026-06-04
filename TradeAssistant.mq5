@@ -15,6 +15,7 @@ input bool   UseATRTrailing     = true;
 
 //--- Buttons
 string BtnSell = "Sell";
+string BtnAdd  = "Add";
 string BtnBuy  = "Buy";
 
 //--- Service
@@ -79,6 +80,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    ObjectDelete(0, BtnSell);
+   ObjectDelete(0, BtnAdd);
    ObjectDelete(0, BtnBuy);
 
    Log("EA stopped");
@@ -115,6 +117,9 @@ void OnChartEvent(
 
    if(sparam == BtnSell)
       OpenTrade(ORDER_TYPE_SELL, "Button Sell");
+
+   if(sparam == BtnAdd)
+      Log("Button Add clicked");
 }
 
 
@@ -122,7 +127,8 @@ void OnChartEvent(
 void CreateButtons()
 {
    CreateButton(BtnSell, 20, 20);
-   CreateButton(BtnBuy,  140, 20);
+   CreateButton(BtnAdd,  140, 20);
+   CreateButton(BtnBuy,  260, 20);
 }
 
 
