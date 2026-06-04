@@ -11,7 +11,6 @@ input double RiskMoney          = 1000.0;
 input int    ATRPeriod          = 14;
 input double ATRMultiplier      = 2.0;
 input int    CloseAfterBars     = 24;
-input bool   OnePositionOnly    = true;
 input bool   UseATRTrailing     = true;
 
 //--- Buttons
@@ -34,6 +33,12 @@ void Log(string msg)
 int OnInit()
 {
    //MathSrand(RandomSeed);
+
+   if(!IsNettingAccount())
+   {
+      Log("EA supports netting accounts only");
+      return(INIT_FAILED);
+   }
 
    CreateButtons();
 
@@ -160,7 +165,7 @@ void OpenRandomTrade(string reason)
 //+------------------------------------------------------------------+
 void OpenTrade(ENUM_ORDER_TYPE type, string reason)
 {
-   if(OnePositionOnly && PositionSelect(_Symbol))
+   if(PositionSelect(_Symbol))
    {
       Log("Trade skipped: position already exists");
       return;
@@ -319,6 +324,16 @@ bool IsNewBar()
    }
 
    return false;
+}
+
+
+//+------------------------------------------------------------------+
+bool IsNettingAccount()
+{
+   long margin_mode =
+      AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+
+   return margin_mode != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
 }
 
 
