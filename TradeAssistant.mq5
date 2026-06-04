@@ -197,7 +197,7 @@ void OpenTrade(ENUM_ORDER_TYPE type, string reason)
          + " reason="
          + reason
          + " lot="
-         + DoubleToString(lot,2)
+         + DoubleToString(lot, GetVolumeDigits())
          + " ATR="
          + DoubleToString(atr,_Digits)
          + " SL="
@@ -275,6 +275,12 @@ double CalculateLot(double stopDistance)
    double stepLot =
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
 
+   if(minLot <= 0 || maxLot <= 0 || stepLot <= 0)
+      return 0;
+
+   int volume_digits =
+      GetVolumeDigits();
+
    if(lot < minLot)
    {
       Log("Trade skipped: minimal lot exceeds risk");
@@ -282,10 +288,13 @@ double CalculateLot(double stopDistance)
    }
 
    lot = MathFloor(lot / stepLot) * stepLot;
-   lot = NormalizeDouble(lot,2);
+   lot = NormalizeDouble(lot, volume_digits);
 
    if(lot > maxLot)
       lot = maxLot;
+
+   lot = MathFloor(lot / stepLot) * stepLot;
+   lot = NormalizeDouble(lot, volume_digits);
 
    return lot;
 }
@@ -304,6 +313,29 @@ bool IsNewBar()
    }
 
    return false;
+}
+
+
+//+------------------------------------------------------------------+
+int GetVolumeDigits()
+{
+   double step_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+
+   int digits = 0;
+
+   while(digits < 8)
+   {
+      double rounded_step =
+         NormalizeDouble(step_lot, digits);
+
+      if(MathAbs(rounded_step - step_lot) < 1e-8)
+         return digits;
+
+      digits++;
+   }
+
+   return 8;
 }
 
 
