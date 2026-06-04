@@ -1,5 +1,5 @@
 ﻿//+------------------------------------------------------------------+
-//|                                      RandomDealATRButtonsAuto.mq5|
+//|                                              TradeAssistant.mq5  |
 //+------------------------------------------------------------------+
 #property strict
 #include <Trade/Trade.mqh>
@@ -24,7 +24,7 @@ datetime lastBarTime = 0;
 //+------------------------------------------------------------------+
 void Log(string msg)
 {
-   Print("[RandomDealATR] ", msg);
+   Print("[TradeAssistant] ", msg);
 }
 
 
