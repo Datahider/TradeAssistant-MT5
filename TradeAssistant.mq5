@@ -112,6 +112,8 @@ void OnChartEvent(
    if(id != CHARTEVENT_OBJECT_CLICK)
       return;
 
+   ResetButtonState(sparam);
+
    if(sparam == BtnBuy)
       OpenTrade(ORDER_TYPE_BUY, "Button Buy");
 
@@ -145,6 +147,17 @@ void CreateButton(string name,int x,int y)
    ObjectSetInteger(0,name,OBJPROP_YSIZE,35);
 
    ObjectSetString(0,name,OBJPROP_TEXT,name);
+}
+
+
+//+------------------------------------------------------------------+
+void ResetButtonState(string name)
+{
+   if(ObjectFind(0, name) < 0)
+      return;
+
+   ObjectSetInteger(0, name, OBJPROP_STATE, false);
+   ChartRedraw();
 }
 
 
