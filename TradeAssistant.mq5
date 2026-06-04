@@ -119,7 +119,7 @@ void OnChartEvent(
       OpenTrade(ORDER_TYPE_SELL, "Button Sell");
 
    if(sparam == BtnAdd)
-      Log("Button Add clicked");
+      AddToPosition();
 }
 
 
@@ -221,6 +221,128 @@ void OpenTrade(ENUM_ORDER_TYPE type, string reason)
 
 
 //+------------------------------------------------------------------+
+void AddToPosition()
+{
+   if(!PositionSelect(_Symbol))
+   {
+      Log("Add skipped: no open position");
+      return;
+   }
+
+   ENUM_POSITION_TYPE type =
+      (ENUM_POSITION_TYPE)
+      PositionGetInteger(POSITION_TYPE);
+
+   double current_volume =
+      PositionGetDouble(POSITION_VOLUME);
+
+   double open_price =
+      PositionGetDouble(POSITION_PRICE_OPEN);
+
+   double current_sl =
+      PositionGetDouble(POSITION_SL);
+
+   if(current_volume <= 0)
+   {
+      Log("Add skipped: invalid position volume");
+      return;
+   }
+
+   if(current_sl <= 0)
+   {
+      Log("Add skipped: stop loss is not set");
+      return;
+   }
+
+   double price = 0;
+   double max_add_lot = 0;
+
+   if(type == POSITION_TYPE_BUY)
+   {
+      if(current_sl <= open_price)
+      {
+         Log("Add skipped: current stop loss is not in profit");
+         return;
+      }
+
+      price = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+      max_add_lot = CalculateMaxAddLotBuy(
+         current_volume,
+         open_price,
+         current_sl,
+         price
+      );
+   }
+
+   if(type == POSITION_TYPE_SELL)
+   {
+      if(current_sl >= open_price)
+      {
+         Log("Add skipped: current stop loss is not in profit");
+         return;
+      }
+
+      price = SymbolInfoDouble(_Symbol,SYMBOL_BID);
+      max_add_lot = CalculateMaxAddLotSell(
+         current_volume,
+         open_price,
+         current_sl,
+         price
+      );
+   }
+
+   if(max_add_lot <= 0)
+   {
+      Log("Add skipped: no safe add volume available");
+      return;
+   }
+
+   double lot = NormalizeVolumeDown(max_add_lot);
+   double min_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   if(lot < min_lot)
+   {
+      Log("Add skipped: safe add volume is below minimal lot");
+      return;
+   }
+
+   bool result = false;
+
+   if(type == POSITION_TYPE_BUY)
+      result = trade.Buy(
+         lot,_Symbol,price,current_sl,0,"Add Buy"
+      );
+
+   if(type == POSITION_TYPE_SELL)
+      result = trade.Sell(
+         lot,_Symbol,price,current_sl,0,"Add Sell"
+      );
+
+   if(result)
+   {
+      Log(
+         "Added "
+         + DoubleToString(lot, GetVolumeDigits())
+         + " to "
+         + EnumToString(type)
+         + " at "
+         + DoubleToString(price,_Digits)
+         + " with SL="
+         + DoubleToString(current_sl,_Digits)
+      );
+   }
+   else
+   {
+      Log(
+         "Add failed. Retcode="
+         + IntegerToString(trade.ResultRetcode())
+      );
+   }
+}
+
+
+//+------------------------------------------------------------------+
 //| ATR from previous closed bar                                     |
 //+------------------------------------------------------------------+
 double GetATR()
@@ -284,23 +406,18 @@ double CalculateLot(double stopDistance)
    if(minLot <= 0 || maxLot <= 0 || stepLot <= 0)
       return 0;
 
-   int volume_digits =
-      GetVolumeDigits();
-
    if(lot < minLot)
    {
       Log("Trade skipped: minimal lot exceeds risk");
       return 0;
    }
 
-   lot = MathFloor(lot / stepLot) * stepLot;
-   lot = NormalizeDouble(lot, volume_digits);
+   lot = NormalizeVolumeDown(lot);
 
    if(lot > maxLot)
       lot = maxLot;
 
-   lot = MathFloor(lot / stepLot) * stepLot;
-   lot = NormalizeDouble(lot, volume_digits);
+   lot = NormalizeVolumeDown(lot);
 
    return lot;
 }
@@ -342,6 +459,94 @@ int GetVolumeDigits()
    }
 
    return 8;
+}
+
+
+//+------------------------------------------------------------------+
+double NormalizeVolumeDown(double volume)
+{
+   double step_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+
+   int volume_digits =
+      GetVolumeDigits();
+
+   if(step_lot <= 0)
+      return 0;
+
+   volume = MathFloor(volume / step_lot) * step_lot;
+
+   return NormalizeDouble(volume, volume_digits);
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateMaxAddLotBuy(
+   double current_volume,
+   double open_price,
+   double current_sl,
+   double add_price)
+{
+   double max_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+
+   double free_volume = max_lot - current_volume;
+
+   if(free_volume <= 0)
+      return 0;
+
+   double denominator = add_price - current_sl;
+
+   if(denominator <= 0)
+      return free_volume;
+
+   double numerator =
+      current_volume * (current_sl - open_price);
+
+   if(numerator <= 0)
+      return 0;
+
+   double max_add_lot = numerator / denominator;
+
+   if(max_add_lot > free_volume)
+      max_add_lot = free_volume;
+
+   return max_add_lot;
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateMaxAddLotSell(
+   double current_volume,
+   double open_price,
+   double current_sl,
+   double add_price)
+{
+   double max_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+
+   double free_volume = max_lot - current_volume;
+
+   if(free_volume <= 0)
+      return 0;
+
+   double denominator = current_sl - add_price;
+
+   if(denominator <= 0)
+      return free_volume;
+
+   double numerator =
+      current_volume * (open_price - current_sl);
+
+   if(numerator <= 0)
+      return 0;
+
+   double max_add_lot = numerator / denominator;
+
+   if(max_add_lot > free_volume)
+      max_add_lot = free_volume;
+
+   return max_add_lot;
 }
 
 
