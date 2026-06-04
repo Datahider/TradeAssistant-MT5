@@ -631,6 +631,44 @@ bool IsNettingAccount()
 
 
 //+------------------------------------------------------------------+
+bool ModifyPosition(string context, double new_sl, double current_tp)
+{
+   if(trade.PositionModify(_Symbol, new_sl, current_tp))
+   {
+      Log(context + " applied");
+      return true;
+   }
+
+   Log(
+      context
+      + " failed. Retcode="
+      + IntegerToString(trade.ResultRetcode())
+   );
+
+   return false;
+}
+
+
+//+------------------------------------------------------------------+
+bool ClosePosition(string context)
+{
+   if(trade.PositionClose(_Symbol))
+   {
+      Log(context + " applied");
+      return true;
+   }
+
+   Log(
+      context
+      + " failed. Retcode="
+      + IntegerToString(trade.ResultRetcode())
+   );
+
+   return false;
+}
+
+
+//+------------------------------------------------------------------+
 void TrailPositionByATR()
 {
    if(!PositionSelect(_Symbol))
@@ -668,15 +706,13 @@ void TrailPositionByATR()
 
       if(currentSL == 0 || newSL > currentSL)
       {
-         Log(
+         ModifyPosition(
             "Trailing BUY SL "
             + DoubleToString(currentSL,_Digits)
             + " -> "
-            + DoubleToString(newSL,_Digits)
-         );
-
-         trade.PositionModify(
-            _Symbol,newSL,currentTP
+            + DoubleToString(newSL,_Digits),
+            newSL,
+            currentTP
          );
       }
       else
@@ -691,15 +727,13 @@ void TrailPositionByATR()
 
       if(currentSL == 0 || newSL < currentSL)
       {
-         Log(
+         ModifyPosition(
             "Trailing SELL SL "
             + DoubleToString(currentSL,_Digits)
             + " -> "
-            + DoubleToString(newSL,_Digits)
-         );
-
-         trade.PositionModify(
-            _Symbol,newSL,currentTP
+            + DoubleToString(newSL,_Digits),
+            newSL,
+            currentTP
          );
       }
       else
@@ -737,8 +771,7 @@ void CheckPositionCloseByBars()
 
    if(barsPassed >= CloseAfterBars)
    {
-      Log("Closing by bars limit");
-      trade.PositionClose(_Symbol);
+      ClosePosition("Closing by bars limit");
    }
 }
 //+------------------------------------------------------------------+
