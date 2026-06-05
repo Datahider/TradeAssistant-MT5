@@ -8,6 +8,7 @@ CTrade trade;
 
 //--- Inputs
 input double RiskMoney          = 1000.0;
+input double MaxLot             = 0.25;
 input int    ATRPeriod          = 14;
 input double ATRMultiplier      = 2.0;
 input int    CloseAfterBars     = 24;
@@ -208,7 +209,9 @@ void ProcessNewPosition()
       return;
 
    double add_lot =
-      NormalizeVolumeDown(target_lot - current_volume);
+      NormalizeVolumeDown(
+         LimitLotByMaximum(target_lot) - current_volume
+      );
 
    if(add_lot < min_lot)
    {
@@ -258,6 +261,11 @@ void AutoAddToPosition()
       return;
 
    double max_add_lot = 0;
+   double max_allowed_lot =
+      GetEffectiveMaxLot();
+
+   if(current_volume >= max_allowed_lot)
+      return;
 
    if(position_type == POSITION_TYPE_BUY)
    {
@@ -290,8 +298,13 @@ void AutoAddToPosition()
    }
 
    double add_lot = NormalizeVolumeDown(max_add_lot);
+   double remaining_lot =
+      NormalizeVolumeDown(max_allowed_lot - current_volume);
    double min_lot =
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   if(add_lot > remaining_lot)
+      add_lot = remaining_lot;
 
    if(add_lot < min_lot)
       return;
@@ -347,7 +360,7 @@ double CalculateLot(
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
 
    double maxLot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+      GetEffectiveMaxLot();
 
    double stepLot =
       SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
@@ -445,6 +458,41 @@ double NormalizeVolumeDown(double volume)
 
 
 //+------------------------------------------------------------------+
+double GetEffectiveMaxLot()
+{
+   double broker_max_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+
+   if(broker_max_lot <= 0)
+      return 0;
+
+   if(MaxLot <= 0)
+      return broker_max_lot;
+
+   if(MaxLot < broker_max_lot)
+      return NormalizeVolumeDown(MaxLot);
+
+   return broker_max_lot;
+}
+
+
+//+------------------------------------------------------------------+
+double LimitLotByMaximum(double lot)
+{
+   double max_lot =
+      GetEffectiveMaxLot();
+
+   if(max_lot <= 0)
+      return 0;
+
+   if(lot > max_lot)
+      return max_lot;
+
+   return lot;
+}
+
+
+//+------------------------------------------------------------------+
 double CalculateLossPerLot(
    ENUM_ORDER_TYPE type,
    double entry_price,
@@ -484,7 +532,7 @@ double CalculateMaxAddLotBuy(
    double add_price)
 {
    double max_lot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+      GetEffectiveMaxLot();
 
    double free_volume = max_lot - current_volume;
 
@@ -519,7 +567,7 @@ double CalculateMaxAddLotSell(
    double add_price)
 {
    double max_lot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+      GetEffectiveMaxLot();
 
    double free_volume = max_lot - current_volume;
 
