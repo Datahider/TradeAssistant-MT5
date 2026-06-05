@@ -13,14 +13,10 @@ input double ATRMultiplier      = 2.0;
 input int    CloseAfterBars     = 24;
 input bool   UseATRTrailing     = true;
 
-//--- Buttons
-string BtnSell = "Sell";
-string BtnAdd  = "Add";
-string BtnBuy  = "Buy";
-
 //--- Service
 datetime lastBarTime = 0;
 int atr_handle = INVALID_HANDLE;
+long tracked_position_id = 0;
 
 
 //+------------------------------------------------------------------+
@@ -48,14 +44,15 @@ int OnInit()
       return(INIT_FAILED);
    }
 
-   CreateButtons();
-
    lastBarTime = iTime(_Symbol, PERIOD_CURRENT, 0);
 
    Log("EA started on " + _Symbol);
 
    if(PositionSelect(_Symbol))
    {
+      tracked_position_id =
+         PositionGetInteger(POSITION_IDENTIFIER);
+
       ENUM_POSITION_TYPE type =
          (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
 
@@ -89,10 +86,6 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   ObjectDelete(0, BtnSell);
-   ObjectDelete(0, BtnAdd);
-   ObjectDelete(0, BtnBuy);
-
    if(atr_handle != INVALID_HANDLE)
    {
       IndicatorRelease(atr_handle);
@@ -106,6 +99,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   MonitorPosition();
+
    if(IsNewBar())
    {
       Log("New bar");
@@ -119,70 +114,54 @@ void OnTick()
 
 
 //+------------------------------------------------------------------+
-void OnChartEvent(
-   const int id,
-   const long &lparam,
-   const double &dparam,
-   const string &sparam)
+void MonitorPosition()
 {
-   if(id != CHARTEVENT_OBJECT_CLICK)
-      return;
-
-   ResetButtonState(sparam);
-
-   if(sparam == BtnBuy)
-      OpenTrade(ORDER_TYPE_BUY, "Button Buy");
-
-   if(sparam == BtnSell)
-      OpenTrade(ORDER_TYPE_SELL, "Button Sell");
-
-   if(sparam == BtnAdd)
-      AddToPosition();
-}
-
-
-//+------------------------------------------------------------------+
-void CreateButtons()
-{
-   CreateButton(BtnSell, 20, 20);
-   CreateButton(BtnAdd,  140, 20);
-   CreateButton(BtnBuy,  260, 20);
-}
-
-
-//+------------------------------------------------------------------+
-void CreateButton(string name,int x,int y)
-{
-   ObjectCreate(0,name,OBJ_BUTTON,0,0,0);
-
-   ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
-   ObjectSetInteger(0,name,OBJPROP_XDISTANCE,x);
-   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,y);
-
-   ObjectSetInteger(0,name,OBJPROP_XSIZE,110);
-   ObjectSetInteger(0,name,OBJPROP_YSIZE,35);
-
-   ObjectSetString(0,name,OBJPROP_TEXT,name);
-}
-
-
-//+------------------------------------------------------------------+
-void ResetButtonState(string name)
-{
-   if(ObjectFind(0, name) < 0)
-      return;
-
-   ObjectSetInteger(0, name, OBJPROP_STATE, false);
-   ChartRedraw();
-}
-
-
-//+------------------------------------------------------------------+
-void OpenTrade(ENUM_ORDER_TYPE type, string reason)
-{
-   if(PositionSelect(_Symbol))
+   if(!PositionSelect(_Symbol))
    {
-      Log("Trade skipped: position already exists");
+      tracked_position_id = 0;
+      return;
+   }
+
+   long current_position_id =
+      PositionGetInteger(POSITION_IDENTIFIER);
+
+   if(current_position_id == tracked_position_id)
+      return;
+
+   tracked_position_id = current_position_id;
+   ProcessNewPosition();
+}
+
+
+//+------------------------------------------------------------------+
+void ProcessNewPosition()
+{
+   double min_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   double current_volume =
+      PositionGetDouble(POSITION_VOLUME);
+
+   if(!IsMinimalLotPosition(current_volume, min_lot))
+   {
+      Log(
+         "Auto sizing skipped: position volume="
+         + DoubleToString(current_volume, GetVolumeDigits())
+      );
+      return;
+   }
+
+   ENUM_POSITION_TYPE position_type =
+      (ENUM_POSITION_TYPE)
+      PositionGetInteger(POSITION_TYPE);
+
+   ENUM_ORDER_TYPE order_type =
+      PositionTypeToOrderType(position_type);
+
+   if(order_type != ORDER_TYPE_BUY
+      && order_type != ORDER_TYPE_SELL)
+   {
+      Log("Auto sizing skipped: unsupported position type");
       return;
    }
 
@@ -190,192 +169,60 @@ void OpenTrade(ENUM_ORDER_TYPE type, string reason)
 
    if(atr <= 0)
    {
-      Log("Trade skipped: ATR unavailable");
+      Log("Auto sizing skipped: ATR unavailable");
       return;
    }
 
-   double stopDistance = atr * ATRMultiplier;
-
-   double ask = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
-   double bid = SymbolInfoDouble(_Symbol,SYMBOL_BID);
-
-   double sl = 0;
-
-   if(type == ORDER_TYPE_BUY)
-      sl = ask - stopDistance;
-
-   if(type == ORDER_TYPE_SELL)
-      sl = bid + stopDistance;
-
-   double entry_price = 0;
-
-   if(type == ORDER_TYPE_BUY)
-      entry_price = ask;
-
-   if(type == ORDER_TYPE_SELL)
-      entry_price = bid;
-
-   double lot = CalculateLot(type, entry_price, sl);
-
-   if(lot <= 0)
-      return;
-
-   bool result = false;
-
-   if(type == ORDER_TYPE_BUY)
-      result = trade.Buy(
-         lot,_Symbol,ask,sl,0,"ATR Buy"
-      );
-
-   if(type == ORDER_TYPE_SELL)
-      result = trade.Sell(
-         lot,_Symbol,bid,sl,0,"ATR Sell"
-      );
-
-   if(result)
-   {
-      Log(
-         "Opened "
-         + EnumToString(type)
-         + " reason="
-         + reason
-         + " lot="
-         + DoubleToString(lot, GetVolumeDigits())
-         + " ATR="
-         + DoubleToString(atr,_Digits)
-         + " SL="
-         + DoubleToString(sl,_Digits)
-      );
-   }
-   else
-   {
-      Log(
-         "Open failed. Retcode="
-         + IntegerToString(trade.ResultRetcode())
-      );
-   }
-}
-
-
-//+------------------------------------------------------------------+
-void AddToPosition()
-{
-   if(!PositionSelect(_Symbol))
-   {
-      Log("Add skipped: no open position");
-      return;
-   }
-
-   ENUM_POSITION_TYPE type =
-      (ENUM_POSITION_TYPE)
-      PositionGetInteger(POSITION_TYPE);
-
-   double current_volume =
-      PositionGetDouble(POSITION_VOLUME);
+   double stop_distance =
+      atr * ATRMultiplier;
 
    double open_price =
       PositionGetDouble(POSITION_PRICE_OPEN);
 
-   double current_sl =
-      PositionGetDouble(POSITION_SL);
+   double current_tp =
+      PositionGetDouble(POSITION_TP);
 
-   if(current_volume <= 0)
+   double stop_loss =
+      CalculateStopLoss(order_type, open_price, stop_distance);
+
+   if(stop_loss <= 0)
    {
-      Log("Add skipped: invalid position volume");
+      Log("Auto sizing skipped: failed to calculate stop loss");
       return;
    }
 
-   if(current_sl <= 0)
-   {
-      Log("Add skipped: stop loss is not set");
+   double target_lot =
+      CalculateLot(order_type, open_price, stop_loss);
+
+   if(target_lot <= 0)
       return;
-   }
 
-   double price = 0;
-   double max_add_lot = 0;
-
-   if(type == POSITION_TYPE_BUY)
-   {
-      if(current_sl <= open_price)
-      {
-         Log("Add skipped: current stop loss is not in profit");
-         return;
-      }
-
-      price = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
-      max_add_lot = CalculateMaxAddLotBuy(
-         current_volume,
-         open_price,
-         current_sl,
-         price
-      );
-   }
-
-   if(type == POSITION_TYPE_SELL)
-   {
-      if(current_sl >= open_price)
-      {
-         Log("Add skipped: current stop loss is not in profit");
-         return;
-      }
-
-      price = SymbolInfoDouble(_Symbol,SYMBOL_BID);
-      max_add_lot = CalculateMaxAddLotSell(
-         current_volume,
-         open_price,
-         current_sl,
-         price
-      );
-   }
-
-   if(max_add_lot <= 0)
-   {
-      Log("Add skipped: no safe add volume available");
+   if(!ModifyPosition(
+      "Initial stop setup "
+      + DoubleToString(stop_loss,_Digits),
+      stop_loss,
+      current_tp
+   ))
       return;
-   }
 
-   double lot = NormalizeVolumeDown(max_add_lot);
-   double min_lot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   double add_lot =
+      NormalizeVolumeDown(target_lot - current_volume);
 
-   if(lot < min_lot)
-   {
-      Log("Add skipped: safe add volume is below minimal lot");
-      return;
-   }
-
-   bool result = false;
-
-   if(type == POSITION_TYPE_BUY)
-      result = trade.Buy(
-         lot,_Symbol,price,current_sl,0,"Add Buy"
-      );
-
-   if(type == POSITION_TYPE_SELL)
-      result = trade.Sell(
-         lot,_Symbol,price,current_sl,0,"Add Sell"
-      );
-
-   if(result)
+   if(add_lot < min_lot)
    {
       Log(
-         "Added "
-         + DoubleToString(lot, GetVolumeDigits())
-         + " to "
-         + EnumToString(type)
-         + " at "
-         + DoubleToString(price,_Digits)
-         + " with SL="
-         + DoubleToString(current_sl,_Digits)
+         "Auto sizing complete without add: target lot="
+         + DoubleToString(target_lot, GetVolumeDigits())
       );
+      return;
    }
-   else
-   {
-      Log(
-         "Add failed. Retcode="
-         + IntegerToString(trade.ResultRetcode())
-      );
-   }
+
+   AddVolumeToPosition(
+      order_type,
+      add_lot,
+      stop_loss,
+      "Initial auto add"
+   );
 }
 
 
@@ -550,77 +397,6 @@ double CalculateLossPerLot(
 }
 
 
-//+------------------------------------------------------------------+
-double CalculateMaxAddLotBuy(
-   double current_volume,
-   double open_price,
-   double current_sl,
-   double add_price)
-{
-   double max_lot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
-
-   double free_volume = max_lot - current_volume;
-
-   if(free_volume <= 0)
-      return 0;
-
-   double denominator = add_price - current_sl;
-
-   if(denominator <= 0)
-      return free_volume;
-
-   double numerator =
-      current_volume * (current_sl - open_price);
-
-   if(numerator <= 0)
-      return 0;
-
-   double max_add_lot = numerator / denominator;
-
-   if(max_add_lot > free_volume)
-      max_add_lot = free_volume;
-
-   return max_add_lot;
-}
-
-
-//+------------------------------------------------------------------+
-double CalculateMaxAddLotSell(
-   double current_volume,
-   double open_price,
-   double current_sl,
-   double add_price)
-{
-   double max_lot =
-      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
-
-   double free_volume = max_lot - current_volume;
-
-   if(free_volume <= 0)
-      return 0;
-
-   double denominator = current_sl - add_price;
-
-   if(denominator <= 0)
-      return free_volume;
-
-   double numerator =
-      current_volume * (open_price - current_sl);
-
-   if(numerator <= 0)
-      return 0;
-
-   double max_add_lot = numerator / denominator;
-
-   if(max_add_lot > free_volume)
-      max_add_lot = free_volume;
-
-   return max_add_lot;
-}
-
-
-//+------------------------------------------------------------------+
 bool IsNettingAccount()
 {
    long margin_mode =
@@ -665,6 +441,102 @@ bool ClosePosition(string context)
    );
 
    return false;
+}
+
+
+//+------------------------------------------------------------------+
+bool AddVolumeToPosition(
+   ENUM_ORDER_TYPE order_type,
+   double lot,
+   double stop_loss,
+   string context)
+{
+   double price = 0;
+   bool result = false;
+
+   if(order_type == ORDER_TYPE_BUY)
+   {
+      price = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+      result = trade.Buy(
+         lot,_Symbol,price,stop_loss,0,context
+      );
+   }
+
+   if(order_type == ORDER_TYPE_SELL)
+   {
+      price = SymbolInfoDouble(_Symbol,SYMBOL_BID);
+      result = trade.Sell(
+         lot,_Symbol,price,stop_loss,0,context
+      );
+   }
+
+   if(result)
+   {
+      Log(
+         context
+         + " applied lot="
+         + DoubleToString(lot, GetVolumeDigits())
+         + " price="
+         + DoubleToString(price,_Digits)
+         + " SL="
+         + DoubleToString(stop_loss,_Digits)
+      );
+      return true;
+   }
+
+   Log(
+      context
+      + " failed. Retcode="
+      + IntegerToString(trade.ResultRetcode())
+   );
+
+   return false;
+}
+
+
+//+------------------------------------------------------------------+
+bool IsMinimalLotPosition(double volume, double min_lot)
+{
+   if(volume <= 0 || min_lot <= 0)
+      return false;
+
+   double step_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+
+   if(step_lot <= 0)
+      return false;
+
+   return MathAbs(volume - min_lot) < (step_lot / 10.0);
+}
+
+
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE PositionTypeToOrderType(
+   ENUM_POSITION_TYPE position_type)
+{
+   if(position_type == POSITION_TYPE_BUY)
+      return ORDER_TYPE_BUY;
+
+   if(position_type == POSITION_TYPE_SELL)
+      return ORDER_TYPE_SELL;
+
+   return WRONG_VALUE;
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateStopLoss(
+   ENUM_ORDER_TYPE order_type,
+   double entry_price,
+   double stop_distance)
+{
+   if(order_type == ORDER_TYPE_BUY)
+      return entry_price - stop_distance;
+
+   if(order_type == ORDER_TYPE_SELL)
+      return entry_price + stop_distance;
+
+   return 0;
 }
 
 
