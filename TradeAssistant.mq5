@@ -208,9 +208,33 @@ void ProcessNewPosition()
    ))
       return;
 
+   double current_risk =
+      CalculateLossPerLot(
+         order_type,
+         open_price,
+         stop_loss,
+         current_volume
+      );
+
+   double remaining_risk =
+      RiskMoney - current_risk;
+
+   if(remaining_risk <= 0)
+   {
+      Log("Auto sizing complete without add: no risk budget left");
+      return;
+   }
+
+   double add_price =
+      GetEntryPrice(order_type);
+
    double add_lot =
-      NormalizeVolumeDown(
-         LimitLotByMaximum(target_lot) - current_volume
+      CalculateAddLotByRisk(
+         order_type,
+         add_price,
+         stop_loss,
+         remaining_risk,
+         current_volume
       );
 
    if(add_lot < min_lot)
@@ -398,6 +422,58 @@ double CalculateLot(
 
 
 //+------------------------------------------------------------------+
+double CalculateAddLotByRisk(
+   ENUM_ORDER_TYPE type,
+   double entry_price,
+   double stop_loss,
+   double risk_budget,
+   double current_volume)
+{
+   double loss_per_lot =
+      CalculateLossPerLot(type, entry_price, stop_loss);
+
+   if(loss_per_lot <= 0 || risk_budget <= 0)
+      return 0;
+
+   double min_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   double step_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
+
+   double max_lot =
+      GetEffectiveMaxLot();
+
+   if(min_lot <= 0 || step_lot <= 0 || max_lot <= 0)
+      return 0;
+
+   double free_lot =
+      NormalizeVolumeDown(max_lot - current_volume);
+
+   if(free_lot < min_lot)
+      return 0;
+
+   double lot = risk_budget / loss_per_lot;
+
+   if(lot > free_lot)
+      lot = free_lot;
+
+   lot = NormalizeVolumeDown(lot);
+
+   double actual_risk =
+      CalculateLossPerLot(type, entry_price, stop_loss, lot);
+
+   if(actual_risk > risk_budget)
+      lot = NormalizeVolumeDown(lot - step_lot);
+
+   if(lot < min_lot)
+      return 0;
+
+   return lot;
+}
+
+
+//+------------------------------------------------------------------+
 bool IsNewBar()
 {
    datetime currentBar =
@@ -476,19 +552,15 @@ double GetEffectiveMaxLot()
 }
 
 
-//+------------------------------------------------------------------+
-double LimitLotByMaximum(double lot)
+double GetEntryPrice(ENUM_ORDER_TYPE order_type)
 {
-   double max_lot =
-      GetEffectiveMaxLot();
+   if(order_type == ORDER_TYPE_BUY)
+      return SymbolInfoDouble(_Symbol,SYMBOL_ASK);
 
-   if(max_lot <= 0)
-      return 0;
+   if(order_type == ORDER_TYPE_SELL)
+      return SymbolInfoDouble(_Symbol,SYMBOL_BID);
 
-   if(lot > max_lot)
-      return max_lot;
-
-   return lot;
+   return 0;
 }
 
 
