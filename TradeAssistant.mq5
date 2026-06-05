@@ -108,6 +108,8 @@ void OnTick()
       if(UseATRTrailing)
          TrailPositionByATR();
 
+      AutoAddToPosition();
+
       CheckPositionCloseByBars();
    }
 }
@@ -222,6 +224,83 @@ void ProcessNewPosition()
       add_lot,
       stop_loss,
       "Initial auto add"
+   );
+}
+
+
+//+------------------------------------------------------------------+
+void AutoAddToPosition()
+{
+   if(!PositionSelect(_Symbol))
+      return;
+
+   ENUM_POSITION_TYPE position_type =
+      (ENUM_POSITION_TYPE)
+      PositionGetInteger(POSITION_TYPE);
+
+   ENUM_ORDER_TYPE order_type =
+      PositionTypeToOrderType(position_type);
+
+   if(order_type != ORDER_TYPE_BUY
+      && order_type != ORDER_TYPE_SELL)
+      return;
+
+   double current_volume =
+      PositionGetDouble(POSITION_VOLUME);
+
+   double open_price =
+      PositionGetDouble(POSITION_PRICE_OPEN);
+
+   double current_sl =
+      PositionGetDouble(POSITION_SL);
+
+   if(current_volume <= 0 || current_sl <= 0)
+      return;
+
+   double max_add_lot = 0;
+
+   if(position_type == POSITION_TYPE_BUY)
+   {
+      if(current_sl <= open_price)
+         return;
+
+      double ask = SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+
+      max_add_lot = CalculateMaxAddLotBuy(
+         current_volume,
+         open_price,
+         current_sl,
+         ask
+      );
+   }
+
+   if(position_type == POSITION_TYPE_SELL)
+   {
+      if(current_sl >= open_price)
+         return;
+
+      double bid = SymbolInfoDouble(_Symbol,SYMBOL_BID);
+
+      max_add_lot = CalculateMaxAddLotSell(
+         current_volume,
+         open_price,
+         current_sl,
+         bid
+      );
+   }
+
+   double add_lot = NormalizeVolumeDown(max_add_lot);
+   double min_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+
+   if(add_lot < min_lot)
+      return;
+
+   AddVolumeToPosition(
+      order_type,
+      add_lot,
+      current_sl,
+      "Bar auto add"
    );
 }
 
@@ -394,6 +473,76 @@ double CalculateLossPerLot(
       return 0;
 
    return -profit;
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateMaxAddLotBuy(
+   double current_volume,
+   double open_price,
+   double current_sl,
+   double add_price)
+{
+   double max_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+
+   double free_volume = max_lot - current_volume;
+
+   if(free_volume <= 0)
+      return 0;
+
+   double denominator = add_price - current_sl;
+
+   if(denominator <= 0)
+      return free_volume;
+
+   double numerator =
+      current_volume * (current_sl - open_price);
+
+   if(numerator <= 0)
+      return 0;
+
+   double max_add_lot = numerator / denominator;
+
+   if(max_add_lot > free_volume)
+      max_add_lot = free_volume;
+
+   return max_add_lot;
+}
+
+
+//+------------------------------------------------------------------+
+double CalculateMaxAddLotSell(
+   double current_volume,
+   double open_price,
+   double current_sl,
+   double add_price)
+{
+   double max_lot =
+      SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
+
+   double free_volume = max_lot - current_volume;
+
+   if(free_volume <= 0)
+      return 0;
+
+   double denominator = current_sl - add_price;
+
+   if(denominator <= 0)
+      return free_volume;
+
+   double numerator =
+      current_volume * (open_price - current_sl);
+
+   if(numerator <= 0)
+      return 0;
+
+   double max_add_lot = numerator / denominator;
+
+   if(max_add_lot > free_volume)
+      max_add_lot = free_volume;
+
+   return max_add_lot;
 }
 
 
