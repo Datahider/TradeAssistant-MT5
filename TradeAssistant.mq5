@@ -881,16 +881,21 @@ void TrailPositionByATR()
       SymbolInfoDouble(_Symbol,SYMBOL_ASK);
 
    double newSL = 0;
+   double normalized_current_sl =
+      NormalizeDouble(currentSL, _Digits);
 
    if(type == POSITION_TYPE_BUY)
    {
-      newSL = bid - stopDistance;
+      newSL = NormalizeDouble(
+         bid - stopDistance,
+         _Digits
+      );
 
-      if(currentSL == 0 || newSL > currentSL)
+      if(currentSL == 0 || newSL > normalized_current_sl)
       {
          ModifyPosition(
             "Trailing BUY SL "
-            + DoubleToString(currentSL,_Digits)
+            + DoubleToString(normalized_current_sl,_Digits)
             + " -> "
             + DoubleToString(newSL,_Digits),
             newSL,
@@ -901,13 +906,16 @@ void TrailPositionByATR()
 
    if(type == POSITION_TYPE_SELL)
    {
-      newSL = ask + stopDistance;
+      newSL = NormalizeDouble(
+         ask + stopDistance,
+         _Digits
+      );
 
-      if(currentSL == 0 || newSL < currentSL)
+      if(currentSL == 0 || newSL < normalized_current_sl)
       {
          ModifyPosition(
             "Trailing SELL SL "
-            + DoubleToString(currentSL,_Digits)
+            + DoubleToString(normalized_current_sl,_Digits)
             + " -> "
             + DoubleToString(newSL,_Digits),
             newSL,
