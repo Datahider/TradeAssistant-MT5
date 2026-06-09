@@ -102,12 +102,12 @@ void OnTick()
 {
    MonitorPosition();
 
+   if(UseATRTrailing)
+      TrailPositionByATR();
+
    if(IsNewBar())
    {
       Log("New bar");
-
-      if(UseATRTrailing)
-         TrailPositionByATR();
 
       AutoAddToPosition();
 
