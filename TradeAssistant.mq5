@@ -237,6 +237,30 @@ void ProcessNewPosition()
          current_volume
       );
 
+   double add_loss_per_lot =
+      CalculateLossPerLot(order_type, add_price, stop_loss);
+
+   Log(
+      "Initial auto add calc: type="
+      + EnumToString(order_type)
+      + " open="
+      + DoubleToString(open_price,_Digits)
+      + " add_price="
+      + DoubleToString(add_price,_Digits)
+      + " SL="
+      + DoubleToString(stop_loss,_Digits)
+      + " current_volume="
+      + DoubleToString(current_volume, GetVolumeDigits())
+      + " current_risk="
+      + DoubleToString(current_risk,2)
+      + " remaining_risk="
+      + DoubleToString(remaining_risk,2)
+      + " loss_per_lot="
+      + DoubleToString(add_loss_per_lot,2)
+      + " add_lot="
+      + DoubleToString(add_lot, GetVolumeDigits())
+   );
+
    if(add_lot < min_lot)
    {
       Log(
@@ -329,6 +353,23 @@ void AutoAddToPosition()
 
    if(add_lot > remaining_lot)
       add_lot = remaining_lot;
+
+   Log(
+      "Bar auto add calc: type="
+      + EnumToString(order_type)
+      + " open="
+      + DoubleToString(open_price,_Digits)
+      + " SL="
+      + DoubleToString(current_sl,_Digits)
+      + " current_volume="
+      + DoubleToString(current_volume, GetVolumeDigits())
+      + " max_add_lot="
+      + DoubleToString(max_add_lot, GetVolumeDigits())
+      + " remaining_lot="
+      + DoubleToString(remaining_lot, GetVolumeDigits())
+      + " add_lot="
+      + DoubleToString(add_lot, GetVolumeDigits())
+   );
 
    if(add_lot < min_lot)
       return;
