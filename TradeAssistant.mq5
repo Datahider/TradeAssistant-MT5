@@ -897,10 +897,6 @@ void TrailPositionByATR()
             currentTP
          );
       }
-      else
-      {
-         Log("Trailing skipped BUY");
-      }
    }
 
    if(type == POSITION_TYPE_SELL)
@@ -917,10 +913,6 @@ void TrailPositionByATR()
             newSL,
             currentTP
          );
-      }
-      else
-      {
-         Log("Trailing skipped SELL");
       }
    }
 }
